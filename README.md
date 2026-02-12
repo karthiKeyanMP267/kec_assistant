@@ -1,13 +1,22 @@
-# OpenCode Chat UI (Simple)
+# KEC Assistant
 
-A minimal ChatGPT-like web UI that uses the OpenCode SDK on a local Node server.
+Full-stack assistant with a React chat UI, a Node-based API that fronts the OpenCode SDK, and three Python semantic-retrieval services (faculty policies, student 2022 corpus, student 2024 corpus).
 
-## Prereqs
+## Repo Layout
 
-- Node.js (you already have this)
-- OpenCode configured with at least one provider (via `opencode` TUI `/connect`, or your existing setup)
+- [client](client): React/Vite front-end chat UI.
+- [server](server): Node API wrapper for OpenCode; Express-based MCP integration.
+- [server/faculty](server/faculty/README.md): Faculty policy retrieval service (Chroma + sentence-transformers).
+- [server/student_2022](server/student_2022/README.md): 2022 student document retrieval service.
+- [server/student_2024](server/student_2024/README.md): 2024 student document retrieval service.
 
-## Run (dev)
+## Prerequisites
+
+- Node.js 18+ (front-end and Node API)
+- Python 3.8+ (for the three retrieval services)
+- OpenCode CLI and provider API keys if you want LLM-backed chat
+
+## Quick Start (UI + Node API)
 
 From the repo root:
 
@@ -16,87 +25,46 @@ npm install
 npm run dev
 ```
 
-- Web UI: http://localhost:5173
-- API: http://localhost:8787/api/health
+- Client: http://localhost:5173 (default Vite port)
+- API: see terminal output for the Node server port (health endpoint is usually /api/health)
 
-## Provider API keys (.env)
+To build just the UI: `npm run build`
 
-Create a .env file at the repo root (see [.env.example](.env.example)) and add provider keys like:
+## Environment Variables (Node API)
 
-- OPENAI_API_KEY
-- ANTHROPIC_API_KEY
-- GROQ_API_KEY
-- GOOGLE_API_KEY
-- MISTRAL_API_KEY
+Create a .env at the repo root (mirror .env.example if present):
 
-The server loads .env on startup and passes these to OpenCode automatically.
+- OPENAI_API_KEY, ANTHROPIC_API_KEY, GROQ_API_KEY, GOOGLE_API_KEY, MISTRAL_API_KEY
+- Optional: OPENCODE_PORT, OPENCODE_EAGER_START, OPENCODE_STARTUP_TIMEOUT_MS, OPENCODE_BIN
 
-## Notes
+The API reads these and passes them to OpenCode. Set OPENCODE_PORT if you need a fixed port; leave unset for auto.
 
-- The backend starts an OpenCode server via the OpenCode CLI (`opencode-ai`).
-- By default, OpenCode picks a free port automatically.
-- You can force a fixed port (pick a free one):
+## Python Retrieval Services
+
+Each service has its own README with detailed instructions. Typical flow:
 
 ```bash
-set OPENCODE_PORT=8010
+cd server/<module>
+pip install -r requirements.txt
+python ingest.py           # build embeddings
+python <module>_server.py  # start service
 ```
 
-Then re-run `npm run dev`.
+- Faculty policies: see [server/faculty/README.md](server/faculty/README.md).
+- Student corpus 2022: see [server/student_2022/README.md](server/student_2022/README.md).
+- Student corpus 2024: see [server/student_2024/README.md](server/student_2024/README.md).
 
-- Automatic port selection is the default. You can also force it explicitly:
+The vector stores live under each module’s folder (chroma.sqlite3 and collection directories). These files are large; store them with Git LFS or regenerate via `python ingest.py`.
 
-```bash
-set OPENCODE_PORT=auto
-```
+## Scripts (root workspaces)
 
-- OpenCode is started automatically when the API starts (to avoid first-message cold start). To disable and start it only when needed:
+- `npm run dev`: starts Node API and React UI together (via workspaces)
+- `npm run start`: starts Node API only
+- `npm run lint`: runs client lint
+- `npm run build`: builds client for production
 
-```bash
-set OPENCODE_EAGER_START=0
-```
+## Troubleshooting
 
-- If the very first request feels slow (cold start), you can start OpenCode immediately when the API starts:
-
-```bash
-set OPENCODE_EAGER_START=1
-```
-
-- If you hit `Timeout waiting for OpenCode server to start...`, you can increase the startup timeout:
-
-```bash
-set OPENCODE_STARTUP_TIMEOUT_MS=60000
-```
-
-Note: a fixed port does not make the model itself faster; it just makes the OpenCode URL predictable.
-
-## If you see `spawn opencode ENOENT`
-
-This means the backend cannot find the `opencode` CLI on PATH.
-
-Fix options:
-
-1) Add npm global bin to PATH (Windows)
-
-- Find it with: `npm bin -g`
-- Add that folder to your user PATH (often `C:\Users\<you>\AppData\Roaming\npm`)
-
-2) Or set an explicit path to the CLI:
-
-```bash
-set OPENCODE_BIN=C:\path\to\opencode.exe
-```
-
-## MCP (Model Context Protocol)
-
-If you already have MCP servers configured (for example from a Copilot/MCP setup), this app can surface them and their tools.
-
-- The backend no longer overwrites `OPENCODE_CONFIG_CONTENT`, so OpenCode can load your normal config (including `mcp` entries).
-- MCP endpoints:
-	- `GET /api/mcp/status`
-	- `POST /api/mcp/add` (body: `{ "name": "...", "config": { ... } }`)
-	- `POST /api/mcp/connect` / `POST /api/mcp/disconnect` (body: `{ "name": "..." }`)
-- Tools endpoint:
-	- `GET /api/tools?provider=...&model=...`
-
-Optional directory context:
-- `OPENCODE_DIRECTORY` controls the directory context OpenCode uses. If not set, the backend uses `INIT_CWD` (when started via npm) or `process.cwd()`.
+- OpenCode CLI not found: set OPENCODE_BIN to the executable path or add your npm global bin to PATH.
+- Slow first response: set OPENCODE_EAGER_START=1 to pre-warm on server start.
+- Port conflicts: set OPENCODE_PORT to an available port before running `npm run dev`.
